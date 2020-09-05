@@ -1,0 +1,10 @@
+name: katjuscha
+license: BSD-3-Clause
+
+executable:
+    main: Main.hs
+    source-dirs: src
+    exposed-modules:
+        Flatparse
+    dependencies:
+        base
