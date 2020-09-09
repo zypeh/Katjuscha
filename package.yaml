@@ -7,4 +7,5 @@ executable:
     exposed-modules:
         Flatparse
     dependencies:
-        base
+        - base
+        - bytestring

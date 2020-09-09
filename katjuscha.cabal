@@ -1,0 +1,25 @@
+cabal-version: 2.2
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: b48f78d3c6398a1d4ba31b374e8af410f20b056cf9a38dd858f4f71cb7b50678
+
+name:           katjuscha
+version:        0.0.0
+license:        BSD-3-Clause
+build-type:     Simple
+
+executable katjuscha
+  main-is: Main.hs
+  other-modules:
+      Flatparse
+      Flatparse.Char
+      Paths_katjuscha
+  hs-source-dirs:
+      src
+  build-depends:
+      base
+    , bytestring
+  default-language: Haskell2010

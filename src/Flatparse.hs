@@ -7,6 +7,10 @@
 module Flatparse where
 
 import GHC.Exts
+import System.IO.Unsafe
+
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Unsafe as B
 
 data Error e = Default | Custom e
   deriving Show
@@ -27,11 +31,17 @@ newtype Parser e a = Parser
 
 -- | Return error with @Custom@ e
 err :: e -> Parser e a
-err e = Parser \_ _ s _ -> Err# (Custom e) s
+err e = Parser \_ i s j -> Err# (Custom e) s
 
 -- | Return error with no error message
 err_ :: Parser e a
 err_ = Parser \_ _ s _ -> Err# Default s
+
+-- | Accepts a parser and silent the error message
+err_p :: Parser e a -> Parser e a
+err_p pa = Parser \e i s j -> case runParser# pa e i s j of
+  Err# _ s -> Err# Default s
+  x -> x
 
 instance Functor (Parser e) where
   fmap f (Parser g) = Parser \e i s j -> case g e i s j of
@@ -54,6 +64,10 @@ instance Monad (Parser e) where
     Err# e s -> Err# e s
     OK# a s j -> runParser# (p a) e i s j
 
+  (>>) (Parser f) (Parser g) = Parser \e i s j -> case f e i s j of
+    Err# e s -> Err# e s
+    OK# a s j -> g e i s j
+   
 -- | Choose between two parsers.
 -- | The second parser is tried if the first one fails, regardless of how much
 -- | the first parser consumed.
@@ -91,6 +105,51 @@ satisfyAscii predicate = Parser \e i s j -> case runParser# anyAsciiChar e i s j
   OK# c s j | predicate c -> OK# c s j
   OK# c _ _ -> Err# Default s
   Err# e s  -> Err# e s
+
+-- | Skip a parser zero or more times. This fails if the given parser fails with having consumed
+-- | input.
+many_ :: Parser e a -> Parser e ()
+many_ (Parser f) = go where
+  go = Parser \e i s j -> case f e i s j of
+    Err# e s' -> case eqAddr# s s' of
+      1# -> OK# () s j
+      _ -> Err# e s'
+    OK# a s j -> runParser# go e i s j
+
+data Pos = Pos Addr#
+
+instance Eq Pos where
+  (==) (Pos p1) (Pos p2) = isTrue# (eqAddr# p1 p2)
+
+data Span = Span !Pos !Pos deriving Eq
+
+spanned :: Parser e a -> Parser e (a, Span)
+spanned (Parser f) = Parser \e i s j -> case f e i s j of
+  Err# e s -> Err# e s
+  OK# a s' j' -> OK# (a, Span (Pos s) (Pos s')) s' j'
+
+data Result e a
+  = OK a B.ByteString
+  | Err (Error e) B.ByteString -- remaining string
+  deriving Show
+
+runParser :: Parser e a -> B.ByteString -> Result e a
+runParser (Parser f) b = unsafeDupablePerformIO do
+  B.unsafeUseAsCString b \(Ptr buf) -> do
+    let !(I# len) = B.length b
+    let end = plusAddr# buf len
+
+    case f end 0# buf 0# of
+      Err# e s -> do
+        let offset = minusAddr# s buf
+        pure (Err e (B.drop (I# offset) b))
+
+      OK# a s j -> do
+        let offset = minusAddr# s buf
+        pure (OK a (B.drop (I# offset) b))
+
+testParser :: Parser e a -> String -> Result e a
+testParser = undefined
 
 someFunc :: String
 someFunc = "aaa"
